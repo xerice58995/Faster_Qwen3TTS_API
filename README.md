@@ -1,3 +1,11 @@
+## 預建立本地 Qwen3-tts 模型檔案
+
+首次使用請執行以下指令以預先下載模型檔案。
+```bash
+./download_model.sh
+```
+
+
 ## 快速啟動 Qwen3-tts
 
 1. 使用Docker建立環境:

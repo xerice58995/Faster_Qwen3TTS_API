@@ -9,9 +9,10 @@ class Qwen3TTSEngine:
 
     def load_model(self):
         self.model = Qwen3TTSModel.from_pretrained(
-        "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+        "./model_weights/Qwen3-TTS-12Hz-1.7B-Base",
         device_map="cuda:0",
         dtype=torch.bfloat16,
+
         attn_implementation="flash_attention_2",
         )
         print(f"模型已成功載入至設備")
