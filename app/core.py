@@ -9,7 +9,7 @@ class Qwen3TTSEngine:
 
     def load_model(self):
         self.model = Qwen3TTSModel.from_pretrained(
-        "./model_weights/Qwen3-TTS-12Hz-1.7B-Base",
+        "../model_weights/Qwen3-TTS-12Hz-1.7B-Base",
         device_map="cuda:0",
         dtype=torch.bfloat16,
 
