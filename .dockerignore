@@ -1,0 +1,14 @@
+# 排除模型權重（用 -v 掛載）
+model_weights/
+
+# 排除 Python 編譯暫存
+__pycache__/
+*.pyc
+
+# 排除版本控制資料夾
+.git/
+.gitignore
+
+# 排除虛擬環境（如果有）
+venv/
+.env

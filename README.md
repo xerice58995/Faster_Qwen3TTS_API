@@ -1,10 +1,3 @@
-## 預建立本地 Qwen3-tts 模型檔案
-
-首次使用請執行以下指令以預先下載模型檔案。
-```bash
-./download_model.sh
-```
-
 
 ## 快速啟動 Qwen3-tts
 
@@ -15,7 +8,11 @@
 
 2. 啟動 API:
     ```bash
-    docker run --rm —gpus all -d -p 10006:8000 --name tts_test3 qwen3tts_api
+    docker run --rm —gpus all -d \
+        -p 10006:8000 \
+        -v /伺服器路徑/Qwen3TTS_API/model_weights:/app/model_weights \
+        --name tts_test3 \
+        qwen3tts_api
     ```
 
     啟動後請訪問：http://<伺服器網址>:10006/docs 進入 Swagger UI 進行測試。
