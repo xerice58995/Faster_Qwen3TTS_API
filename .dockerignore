@@ -1,5 +1,8 @@
 # 排除模型權重（用 -v 掛載）
-model_weights/
+model_weights/*
+
+# 不忽略 .gitkeep，保留 GitHub 上資料夾結構
+!model_weights/.gitkeep
 
 # 排除 Python 編譯暫存
 __pycache__/
