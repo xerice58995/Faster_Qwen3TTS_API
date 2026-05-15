@@ -6,7 +6,10 @@ WORKDIR /app
 
 # 安裝系統依賴
 RUN apt-get update -o Acquire::AllowInsecureRepositories=true -o Acquire::AllowDowngradeToInsecureRepositories=true && \
-    apt-get install -y --allow-unauthenticated libsndfile1 ffmpeg && \
+    apt-get install -y --allow-unauthenticated \
+    libsndfile1 \
+    ffmpeg \
+    build-essential && \
     rm -rf /var/lib/apt/lists/*
 
 # 安裝 Qwen3-tts

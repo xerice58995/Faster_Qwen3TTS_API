@@ -1,0 +1,15 @@
+# Python 執行快取
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 模型權重 (通常太大，不建議進 Git)
+model_weights/
+
+# 作業系統垃圾
+.DS_Store
+Thumbs.db
+
+# Docker 相關 (如果你有本地產出的日誌)
+*.log

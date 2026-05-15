@@ -10,7 +10,7 @@
     ```bash
     docker run --rm —gpus all -d \
         -p 10006:8000 \
-        -v /伺服器路徑/Qwen3TTS_API/model_weights:/app/model_weights \
+        -v /伺服器路徑/model_weights:/app/model_weights \
         --name tts_test3 \
         qwen3tts_api
     ```
@@ -22,13 +22,6 @@
     docker stop tts_test3 
     docker rm tts_test3
     ```
-
-4. 啟動 API:
-    ```bash
-    python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-    ```
-
-    啟動後請訪問：http://localhost:8000/docs 進入 Swagger UI 進行測試。
 
 ## 使用說明
 
