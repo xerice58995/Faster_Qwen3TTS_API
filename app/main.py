@@ -35,6 +35,47 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# -------------------------
+# TTS API - Voice Clone (公司標準)
+# -------------------------
+
+@app.post("/tts")
+async def tts_voice_clone(
+    speaker_prompt_audio: UploadFile = File(
+        ...,
+        description="【必填】參考音檔（樣本），15秒左右，用於克隆說話者的音色。",
+    ),
+    speaker_prompt_text_transcription: Optional[str] = Form(
+        None,
+        description="【選填】參考音檔的文字稿，可留白。",
+    ),
+    content_to_synthesize: str = Form(
+        ...,
+        description="【必填】想要模型說出的文字內容，使用簡體中文以避免發音錯誤。",
+        examples=[
+            "你好，我是一位虚拟助理，今天很高兴能够有这个机会认识各位，并和各位介绍功能。"
+        ],
+    ),
+    language: str = Form(
+        default="Chinese",
+        description="【選填】想要模型生成的語言，預設為 Chinese",
+        examples=["Chinese"],
+    ),
+):
+
+    wav, sr = engine.generate(
+        text=content_to_synthesize,
+        language=language,
+        ref_audio=speaker_prompt_audio,
+        ref_text=speaker_prompt_text_transcription,
+    )
+    print(
+        f"DEBUG: wav type: {type(wav)}, len: {len(wav) if wav is not None else 'None'}, sr: {sr}"
+    )
+    if wav is None or len(wav) == 0:
+        raise HTTPException(status_code=500, detail="模型未生成任何音訊數據")
+    return wav_to_stream(wav, sr)
+
 
 # -------------------------
 # Voice Clone

@@ -25,6 +25,28 @@
 
 ## 使用說明
 
+### (5/18) 更新符合公司規定的API規格
+
+API端點```/tts```已根據要求將參數做以下設置：
+```
+    - content_to_synthesize: 要合成的文字內容
+    - speaker_prompt_audio: 參考音檔
+    - speaker_prompt_text_transcription: 參考音檔的文字稿
+```
+
+curl 命令方式：
+```curl
+# 預設方法
+curl -X POST "http://localhost:8000/tts" \
+  -F "speaker_prompt_audio=@/path/to/audio.m4a" \
+  -F "speaker_prompt_text_transcription=這是參考音檔的文字稿" \
+  -F "content_to_synthesize=你好，我是虛擬助理，今天很高興認識你。" \
+  -F "language=Chinese" \
+  --output output.wav
+```
+
+--------------------------------------------------------------------------------
+### 原始版本說明：
 Qwen3-tts的優勢情緒生成，會推測提示詞文本的語氣生成最貼近情境的語調、音色
 
 Qwen3-tts的API先實裝了Voice Clone一種功能，其餘功能相較VoxCPM2沒有明顯優勢：
