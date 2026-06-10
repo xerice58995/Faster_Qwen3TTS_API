@@ -1,0 +1,9 @@
+faster-qwen3-tts
+qwen-tts>=0.1.1
+transformers>=4.57
+numpy
+soundfile
+huggingface-hub
+fastapi>=0.100.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.7

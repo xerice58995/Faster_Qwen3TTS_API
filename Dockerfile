@@ -12,12 +12,9 @@ RUN apt-get update -o Acquire::AllowInsecureRepositories=true -o Acquire::AllowD
     build-essential && \
     rm -rf /var/lib/apt/lists/*
 
-# 安裝 Qwen3-tts
-RUN pip install --no-cache-dir -U faster-qwen3-tts
-
-# 複製依賴文件並安裝
-COPY pyproject.toml .
-RUN pip install --no-cache-dir -e .[demo]
+# 安裝 Faster-Qwen3-tts及依賴文件
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # 複製程式碼
 COPY . .
@@ -26,4 +23,4 @@ COPY . .
 EXPOSE 8000
 
 # 啟動指令
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

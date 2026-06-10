@@ -112,9 +112,9 @@ def tts_voice_clone_stream(
         ],
     ),
     language: str = Form(
-        default="Chinese",
-        description="【選填】想要模型生成的語言，預設為 Chinese",
-        examples=["Chinese"],
+        default="Auto",
+        description="【選填】想要模型生成的語言，預設為 Auto",
+        examples=["Auto"],
     ),
 ):
 
@@ -126,18 +126,18 @@ def tts_voice_clone_stream(
 
     def audio_stream_generator():
         try:
-            # 1. 關鍵優化：在串流的最開頭，先吐出虛擬的 WAV Header 騙過瀏覽器
+            # 在串流的開頭，使用虛擬的 WAV Header
             yield _wav_header_chunk(sample_rate=24000)
 
             with model_lock:
-                stream_gen = engine.generate_stream(
+                stream_gen = engine.generate(
                     text=content_to_synthesize,
                     language=language,
                     ref_audio=temp_ref_path,
                     ref_text=speaker_prompt_text_transcription,
                 )
 
-                # 2. 隨後源源不斷地吐出真正的 PCM16 數據
+                # 2. 隨後片段輸出 PCM16 數據
                 for chunk, sr, timing in stream_gen:
                     yield _to_pcm16_bytes(chunk)
         except Exception as e:

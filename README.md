@@ -8,7 +8,7 @@
 
 2. 啟動 API:
     ```bash
-    docker run --rm —gpus all -d \
+    docker run --rm --gpus all -d \
         -p 10006:8000 \
         -v /伺服器路徑/model_weights:/app/model_weights \
         --name faster_tts_test3 \

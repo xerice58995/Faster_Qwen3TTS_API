@@ -22,5 +22,5 @@ class FasterQwen3TTSEngine:
     def generate(self, **kwargs):
         if self.model is None:
             raise RuntimeError("模型尚未載入")
-        wav, sr = self.model.generate_voice_design(**kwargs)
-        return wav, sr
+
+        return self.model.generate_voice_clone_streaming(**kwargs)
