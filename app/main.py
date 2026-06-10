@@ -118,7 +118,8 @@ def tts_voice_clone_stream(
     ),
 ):
 
-    ext = os.path.splitext(speaker_prompt_audio.filename)[1] or ".wav"
+    filename = speaker_prompt_audio.filename or "audio.wav"
+    ext = os.path.splitext(filename)[1]
     temp_ref_path = f"temp_ref_{uuid.uuid4()}{ext}"
 
     with open(temp_ref_path, "wb") as buffer:
