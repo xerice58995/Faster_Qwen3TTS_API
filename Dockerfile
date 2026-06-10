@@ -1,5 +1,5 @@
 # 使用支援 CUDA 的 PyTorch 映像檔
-FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+FROM pytorch/pytorch:2.5.1-cuda12.8-cudnn9-runtime
 
 # 設定工作目錄
 WORKDIR /app
@@ -13,11 +13,11 @@ RUN apt-get update -o Acquire::AllowInsecureRepositories=true -o Acquire::AllowD
     rm -rf /var/lib/apt/lists/*
 
 # 安裝 Qwen3-tts
-RUN pip install --no-cache-dir -U qwen-tts
+RUN pip install --no-cache-dir -U faster-qwen3-tts
 
 # 複製依賴文件並安裝
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml .
+RUN pip install --no-cache-dir -e .[demo]
 
 # 複製程式碼
 COPY . .

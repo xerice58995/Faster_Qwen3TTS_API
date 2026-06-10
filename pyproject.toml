@@ -1,46 +1,50 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["faster_qwen3_tts*"]
+
 [project]
-name = "qwen-tts"
-version = "0.1.1"
-description = "Qwen-TTS python package"
+name = "faster-qwen3-tts"
+version = "0.2.6"
+description = "Real-time Qwen3-TTS inference using manual CUDA graph capture"
 readme = "README.md"
-requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Andres Marafioti" }]
+keywords = ["tts", "qwen", "cuda", "cudagraph", "streaming"]
 classifiers = [
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: 3.13",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-license = { text = "Apache-2.0" }
-authors = [{ name = "Alibaba Qwen Team" }]
-
+requires-python = ">=3.10"
 dependencies = [
-  "transformers==4.57.3",
-  "accelerate==1.12.0",
-  "gradio",
-  "librosa",
-  "torchaudio",
-  "soundfile",
-  "sox",
-  "onnxruntime",
-  "einops",
+    "qwen-tts>=0.1.1",
+    "transformers>=4.57",
+    "torch>=2.5.1",
+    "numpy",
+    "soundfile",
+    "huggingface-hub",
 ]
 
-[project.urls]
-Homepage = "https://github.com/Qwen/Qwen3-TTS"
-Repository = "https://github.com/Qwen/Qwen3-TTS"
+[project.optional-dependencies]
+demo = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.7",
+]
 
 [project.scripts]
-qwen-tts-demo = "qwen_tts.cli.demo:main"
+faster-qwen3-tts = "faster_qwen3_tts.cli:main"
 
-[tool.setuptools]
-packages = { find = { where = ["."] , include = ["qwen_tts*"] } }
-include-package-data = true
-
-[tool.setuptools.package-data]
-qwen_tts = ["py.typed", "**/*.npz"]
+[project.urls]
+Homepage = "https://github.com/andimarafioti/faster-qwen3-tts"
+Repository = "https://github.com/andimarafioti/faster-qwen3-tts"

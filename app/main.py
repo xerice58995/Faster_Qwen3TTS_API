@@ -1,20 +1,22 @@
 import gc
 import io
 import os
+import shutil
 import tempfile
+import threading
 import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
 
 import numpy as np
-import soundfile as sf
 import torch
-from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 
-from app.core import Qwen3TTSEngine
+from app.core import FasterQwen3TTSEngine
 
-engine = Qwen3TTSEngine()
+engine = FasterQwen3TTSEngine()
+model_lock = threading.Lock()
 
 
 @asynccontextmanager
@@ -35,12 +37,65 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+
 # -------------------------
-# TTS API - Voice Clone (公司標準)
+# 虛擬大值 Header，用於在SwaggerUI內進行串流
+# -------------------------
+def _wav_header_chunk(sample_rate=24000, channels=1, bits_per_sample=16) -> bytes:
+    """
+    構造一個虛擬的 WAV 標頭。
+    將音訊總長度設為一個極大值（約 1.8 GB，相當於 3 小時），
+    這樣能強制讓瀏覽器、Swagger UI 和播放器『立刻開始播放』而不會等待下載結束。
+    """
+    fake_data_size = 1800000000
+    fake_riff_size = fake_data_size + 36
+    byte_rate = sample_rate * channels * (bits_per_sample // 8)
+    block_align = channels * (bits_per_sample // 8)
+
+    header = bytearray()
+    header.extend(b"RIFF")
+    header.extend(fake_riff_size.to_bytes(4, "little"))
+    header.extend(b"WAVE")
+    header.extend(b"fmt ")
+    header.extend((16).to_bytes(4, "little"))  # Subchunk1Size
+    header.extend((1).to_bytes(2, "little"))  # AudioFormat (1 = PCM)
+    header.extend(channels.to_bytes(2, "little"))
+    header.extend(sample_rate.to_bytes(4, "little"))
+    header.extend(byte_rate.to_bytes(4, "little"))
+    header.extend(block_align.to_bytes(2, "little"))
+    header.extend(bits_per_sample.to_bytes(2, "little"))
+    header.extend(b"data")
+    header.extend(fake_data_size.to_bytes(4, "little"))
+    return bytes(header)
+
+
+# -------------------------
+# 將模型輸出的 float32 轉換為標準純 PCM 16bit 二進位流
 # -------------------------
 
+
+def _to_pcm16_bytes(wav) -> bytes:
+    if hasattr(wav, "cpu"):
+        wav = wav.cpu().numpy()
+    elif isinstance(wav, list):
+        wav = np.array(wav)
+
+    wav = wav.astype(np.float32).flatten()
+
+    # 防爆音正規化
+    if np.abs(wav).max() > 0:
+        wav = wav / np.abs(wav).max()
+
+    return (wav * 32767).astype(np.int16).tobytes()
+
+
+# -------------------------
+# TTS API - Voice Clone Streaming
+# -------------------------
+
+
 @app.post("/tts")
-async def tts_voice_clone(
+def tts_voice_clone_stream(
     speaker_prompt_audio: UploadFile = File(
         ...,
         description="【必填】參考音檔（樣本），15秒左右，用於克隆說話者的音色。",
@@ -63,104 +118,34 @@ async def tts_voice_clone(
     ),
 ):
 
-    wav, sr = engine.generate(
-        text=content_to_synthesize,
-        language=language,
-        ref_audio=speaker_prompt_audio,
-        ref_text=speaker_prompt_text_transcription,
-    )
-    print(
-        f"DEBUG: wav type: {type(wav)}, len: {len(wav) if wav is not None else 'None'}, sr: {sr}"
-    )
-    if wav is None or len(wav) == 0:
-        raise HTTPException(status_code=500, detail="模型未生成任何音訊數據")
-    return wav_to_stream(wav, sr)
+    ext = os.path.splitext(speaker_prompt_audio.filename)[1] or ".wav"
+    temp_ref_path = f"temp_ref_{uuid.uuid4()}{ext}"
 
+    with open(temp_ref_path, "wb") as buffer:
+        shutil.copyfileobj(speaker_prompt_audio.file, buffer)
 
-# -------------------------
-# Voice Clone
-# 於text處輸入希望TTS模型生成的語句
-# 於language輸入生成語言
-# 於ref_audio上傳需要克隆的音檔
-# 於ref_text上傳文字稿
-# 由於是中國研發的TTS模型，Prompt建議使用簡體中文以避免發音錯誤
-# -------------------------
+    def audio_stream_generator():
+        try:
+            # 1. 關鍵優化：在串流的最開頭，先吐出虛擬的 WAV Header 騙過瀏覽器
+            yield _wav_header_chunk(sample_rate=24000)
 
+            with model_lock:
+                stream_gen = engine.generate_stream(
+                    text=content_to_synthesize,
+                    language=language,
+                    ref_audio=temp_ref_path,
+                    ref_text=speaker_prompt_text_transcription,
+                )
 
-@app.post("/generate/voice_clone")
-async def voice_clone(
-    text: str = Form(
-        ...,
-        description="【必填】想要模型說出的文字內容，使用簡體中文以避免發音錯誤。",
-        examples=[
-            "你好，我是一位虚拟助理，今天很高兴能够有这个机会认识各位，并和各位介绍功能。"
-        ],
-    ),
-    language: str = Form(
-        ...,
-        description="【必填】想要模型生成的語言：Chinese, English...",
-        examples=["Chinese"],
-    ),
-    ref_audio: UploadFile = File(
-        ...,
-        description="【必填】參考音檔（樣本），15秒左右，可從Samples資料夾選取。",
-    ),
-    ref_text: Optional[str] = Form(
-        None,
-        description="【選填】上傳音檔的文字稿，可留白。",
-        examples=["【選填】上傳音檔的文字稿。"],
-    ),
-):
-    wav, sr = engine.generate(
-        text=text, language=language, ref_audio=ref_audio, ref_text=ref_text
-    )
-    print(
-        f"DEBUG: wav type: {type(wav)}, len: {len(wav) if wav is not None else 'None'}, sr: {sr}"
-    )
-    if wav is None or len(wav) == 0:
-        raise HTTPException(status_code=500, detail="模型未生成任何音訊數據")
-    return wav_to_stream(wav, sr)
+                # 2. 隨後源源不斷地吐出真正的 PCM16 數據
+                for chunk, sr, timing in stream_gen:
+                    yield _to_pcm16_bytes(chunk)
+        except Exception as e:
+            print(f"錯誤: {str(e)}")
+            raise HTTPException(status_code=500, detail="推理失敗")
+        finally:
+            if os.path.exists(temp_ref_path):
+                os.remove(temp_ref_path)
 
-
-async def save_temp_file(upload_file: UploadFile):
-    ext = os.path.splitext(upload_file.filename)[1]
-    tmp_path = f"temp_{uuid.uuid4()}{ext}"
-    with open(tmp_path, "wb") as buffer:
-        buffer.write(await upload_file.read())
-    return tmp_path
-
-
-def wav_to_stream(wav, sr):
-    # 如果 wav 是 [[...]] 這種格式，我們需要取出裡面的內容
-    while (
-        isinstance(wav, list)
-        and len(wav) == 1
-        and (isinstance(wav[0], list) or hasattr(wav[0], "shape"))
-    ):
-        print("DEBUG: 偵測到嵌套結構，正在拆解...")
-        wav = wav[0]
-
-    # 1. 處理不同類型的輸入
-    if isinstance(wav, list):
-        # 如果是 list，先轉成 numpy
-        wav = np.array(wav)
-    elif hasattr(wav, "cpu"):
-        # 如果是 torch tensor，轉到 cpu 並轉成 numpy
-        wav = wav.cpu().numpy()
-
-    wav = wav.astype(np.float32).flatten()
-
-    print(f"DEBUG: 最終音訊採樣數: {len(wav)}")
-
-    # 數據正規化與防爆音
-    if np.abs(wav).max() > 0:
-        wav = wav / np.abs(wav).max()
-
-    # 存成實體暫存檔 (Swagger UI 顯示 Bug )
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-
-    sf.write(temp_file.name, wav, sr if sr else 24000, format="WAV", subtype="PCM_16")
-
-    return FileResponse(
-        path=temp_file.name, media_type="audio/wav", filename="qwen3_gen.wav"
-    )
+    # 媒體類型設為標準的 audio/wav，Swagger UI 看到這個就會立刻渲染出播放器！
+    return StreamingResponse(audio_stream_generator(), media_type="audio/wav")
