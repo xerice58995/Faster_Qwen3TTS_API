@@ -4,6 +4,7 @@ import os
 import shutil
 import tempfile
 import threading
+import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -32,59 +33,23 @@ async def lifespan(app: FastAPI):
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()  # 進階清理：清理進程間通訊的顯存
+        torch.cuda.ipc_collect()
 
 
 app = FastAPI(lifespan=lifespan)
-
-
-# -------------------------
-# 虛擬大值 Header，用於在SwaggerUI內進行串流
-# -------------------------
-def _wav_header_chunk(sample_rate=24000, channels=1, bits_per_sample=16) -> bytes:
-    """
-    構造一個虛擬的 WAV 標頭。
-    將音訊總長度設為一個極大值（約 1.8 GB，相當於 3 小時），
-    這樣能強制讓瀏覽器、Swagger UI 和播放器『立刻開始播放』而不會等待下載結束。
-    """
-    fake_data_size = 1800000000
-    fake_riff_size = fake_data_size + 36
-    byte_rate = sample_rate * channels * (bits_per_sample // 8)
-    block_align = channels * (bits_per_sample // 8)
-
-    header = bytearray()
-    header.extend(b"RIFF")
-    header.extend(fake_riff_size.to_bytes(4, "little"))
-    header.extend(b"WAVE")
-    header.extend(b"fmt ")
-    header.extend((16).to_bytes(4, "little"))  # Subchunk1Size
-    header.extend((1).to_bytes(2, "little"))  # AudioFormat (1 = PCM)
-    header.extend(channels.to_bytes(2, "little"))
-    header.extend(sample_rate.to_bytes(4, "little"))
-    header.extend(byte_rate.to_bytes(4, "little"))
-    header.extend(block_align.to_bytes(2, "little"))
-    header.extend(bits_per_sample.to_bytes(2, "little"))
-    header.extend(b"data")
-    header.extend(fake_data_size.to_bytes(4, "little"))
-    return bytes(header)
-
 
 # -------------------------
 # 將模型輸出的 float32 轉換為標準純 PCM 16bit 二進位流
 # -------------------------
 
 
-def _to_pcm16_bytes(wav) -> bytes:
+def _to_pcm16_bytes(wav):
     if hasattr(wav, "cpu"):
         wav = wav.cpu().numpy()
-    elif isinstance(wav, list):
-        wav = np.array(wav)
 
-    wav = wav.astype(np.float32).flatten()
+    wav = np.asarray(wav, dtype=np.float32).flatten()
 
-    # 防爆音正規化
-    if np.abs(wav).max() > 0:
-        wav = wav / np.abs(wav).max()
+    wav = np.clip(wav, -1.0, 1.0)
 
     return (wav * 32767).astype(np.int16).tobytes()
 
@@ -96,57 +61,56 @@ def _to_pcm16_bytes(wav) -> bytes:
 
 @app.post("/tts")
 def tts_voice_clone_stream(
-    speaker_prompt_audio: UploadFile = File(
-        ...,
-        description="【必填】參考音檔（樣本），15秒左右，用於克隆說話者的音色。",
-    ),
-    speaker_prompt_text_transcription: Optional[str] = Form(
-        None,
-        description="【選填】參考音檔的文字稿，可留白。",
-    ),
-    content_to_synthesize: str = Form(
-        ...,
-        description="【必填】想要模型說出的文字內容，使用簡體中文以避免發音錯誤。",
-        examples=[
-            "你好，我是一位虚拟助理，今天很高兴能够有这个机会认识各位，并和各位介绍功能。"
-        ],
-    ),
-    language: str = Form(
-        default="Auto",
-        description="【選填】想要模型生成的語言，預設為 Auto",
-        examples=["Auto"],
-    ),
+    speaker_prompt_audio: UploadFile = File(...),
+    speaker_prompt_text_transcription: Optional[str] = Form(None),
+    content_to_synthesize: str = Form(...),
+    language: str = Form(default="Chinese"),
+    chunk_size: int = Form(default=8),
 ):
-
+    # 【核心修正 1】改用系統標準 Temp 目錄，避免在專案目錄下產生權限或衝突問題
+    temp_dir = tempfile.gettempdir()
     filename = speaker_prompt_audio.filename or "audio.wav"
     ext = os.path.splitext(filename)[1]
-    temp_ref_path = f"temp_ref_{uuid.uuid4()}{ext}"
+    temp_ref_path = os.path.join(temp_dir, f"tts_ref_{uuid.uuid4()}{ext}")
 
     with open(temp_ref_path, "wb") as buffer:
         shutil.copyfileobj(speaker_prompt_audio.file, buffer)
 
+    # 【核心修正 2】將推理過程與檔案生命週期優化隔離
     def audio_stream_generator():
         try:
-            # 在串流的開頭，使用虛擬的 WAV Header
-            yield _wav_header_chunk(sample_rate=24000)
-
+            # 確保推理時獨佔模型資源
             with model_lock:
+                print("A. 準備呼叫 engine.generate")
                 stream_gen = engine.generate(
                     text=content_to_synthesize,
                     language=language,
                     ref_audio=temp_ref_path,
                     ref_text=speaker_prompt_text_transcription,
+                    chunk_size=chunk_size,
                 )
+                print("B. engine.generate 已返回")
 
-                # 2. 隨後片段輸出 PCM16 數據
                 for chunk, sr, timing in stream_gen:
+                    print(f"{len(chunk)=} {time.strftime('%H:%M:%S')}")
+                    print(
+                        f"shape={chunk.shape}",
+                        f"dtype={chunk.dtype}",
+                        f"min={chunk.min()}",
+                        f"max={chunk.max()}",
+                        f"sr={sr}",
+                    )
                     yield _to_pcm16_bytes(chunk)
-        except Exception as e:
-            print(f"錯誤: {str(e)}")
-            raise HTTPException(status_code=500, detail="推理失敗")
-        finally:
-            if os.path.exists(temp_ref_path):
-                os.remove(temp_ref_path)
 
-    # 媒體類型設為標準的 audio/wav，Swagger UI 看到這個就會立刻渲染出播放器！
-    return StreamingResponse(audio_stream_generator(), media_type="audio/wav")
+        except Exception as e:
+            print(f"❌ 推理運行中發生錯誤: {str(e)}")
+        finally:
+            # 【核心修正 3】當整個串流徹底結束（或斷開）後，才安全地移除暫存檔
+            if os.path.exists(temp_ref_path):
+                try:
+                    os.remove(temp_ref_path)
+                    print(f"🧹 已安全清理暫存檔: {temp_ref_path}")
+                except Exception as e:
+                    print(f"⚠️ 清理暫存檔失敗: {str(e)}")
+
+    return StreamingResponse(audio_stream_generator(), media_type="audio/x-raw")

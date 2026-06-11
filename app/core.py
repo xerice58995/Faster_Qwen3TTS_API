@@ -12,10 +12,8 @@ class FasterQwen3TTSEngine:
     def load_model(self):
         self.model = FasterQwen3TTS.from_pretrained(
             "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
-            device_map="cuda:0",
             dtype=torch.bfloat16,
-            cache_dir="/app/model_weights",
-            attn_implementation="flash_attention_2",
+            attn_implementation="sdpa",
         )
         print(f"模型已成功載入至設備")
 

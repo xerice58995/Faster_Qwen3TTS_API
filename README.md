@@ -15,9 +15,21 @@
         faster_qwen3tts_api
     ```
 
-    啟動後請訪問：http://<伺服器網址>:10006/docs 進入 Swagger UI 進行測試。
+3. 測試API:
+    由於FastAPI 的 Swagger UI 預設機制是必須等整個請求完全結束、二進位資料全部下載完後，才會在網頁上生成播放器，無法實現串流播放。
+    請直接使用curl呼叫以達到快速回應(低TTFT)。
+    ```curl
+    curl -N -s \
+      -X POST "http://localhost:8000/tts" \
+      -F 'speaker_prompt_audio=@./Sample.wav;type=audio/wav' \
+      -F 'speaker_prompt_text_transcription=你好，我是八维智能的虚拟助理，今天很高兴能够有这个机会认识各位，并和各位介绍这个功能。' \
+      -F 'content_to_synthesize=今天是我第一天上班，对我来说是一个全新的开始，也是一个很重要的学习机会。虽然还在熟悉整个环境与流程，但我会尽快上手，把工作内容做好，也希望在接下来的时间里，能够顺利协助大家的需求。' \
+      -F 'language=Chinese' \
+      -F 'chunk_size=8' \
+      | ffplay -f s16le -ar 24000 -i -
+    ```
 
-3. 關閉 API:
+4. 關閉 API:
     ```bash
     docker stop faster_tts_test3 
     docker rm faster_tts_test3
@@ -35,15 +47,16 @@ API端點```/tts```已根據公司要求將參數做以下設置：
 ```
 
 curl 命令方式：
-```curl
-# 預設方法
-curl -X POST "http://localhost:8000/tts" \
-  -F "speaker_prompt_audio=@/path/to/audio.m4a" \
-  -F "speaker_prompt_text_transcription=這是參考音檔的文字稿" \
-  -F "content_to_synthesize=你好，我是虛擬助理，今天很高興認識你。" \
-  -F "language=Chinese" \
-  | ffplay -nodisp -autoexit -f s16le -ar 24000 -ac 1 -
-```
+  ```curl
+  curl -N -s \
+    -X POST "http://localhost:8000/tts" \
+    -F 'speaker_prompt_audio=@./Sample.wav;type=audio/wav' \
+    -F 'speaker_prompt_text_transcription=你好，我是八维智能的虚拟助理，今天很高兴能够有这个机会认识各位，并和各位介绍这个功能。' \
+    -F 'content_to_synthesize=今天是我第一天上班，对我来说是一个全新的开始，也是一个很重要的学习机会。虽然还在熟悉整个环境与流程，但我会尽快上手，把工作内容做好，也希望在接下来的时间里，能够顺利协助大家的需求。' \
+    -F 'language=Chinese' \
+    -F 'chunk_size=8'
+    | ffplay -f s16le -ar 24000 -i -
+  ```
 
 --------------------------------------------------------------------------------
 ### 模型說明：
